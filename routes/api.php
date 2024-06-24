@@ -10,7 +10,7 @@ Route::post('register', [ApiController::class, 'register']);
 Route::post('login', [ApiController::class, 'login']);
 
 //protected routes
-Route::group(['middleware' => ['auth:API']], function () {
+Route::group(['middleware' => ['auth:api']], function () {
     Route::get('profile', [ApiController::class, 'profile']);
     Route::get('logout', [ApiController::class, 'logout']);
 });
