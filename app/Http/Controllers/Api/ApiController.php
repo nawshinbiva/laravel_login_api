@@ -10,6 +10,9 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use App\Mail\MyTestMail;
+use Exception;
+use Illuminate\Support\Facades\Log;
 
 class ApiController extends Controller
 {
@@ -77,11 +80,6 @@ class ApiController extends Controller
                 "data" => []
             ]);
         }
-
-
-        //auth token
-
-
     }
     //GET [Auth: Token]
     public function profile()
@@ -108,92 +106,95 @@ class ApiController extends Controller
         ]);
 
     }
-    //POST [email]
-    public function forgotPassword(Request $request){
-        //validate
-        $request->validate([
-            "email"=>"required|email|string",
-        ]);
+     // POST [email]
+     public function forgotPassword(Request $request)
+     {
+         $request->validate([
+             "email" => "required|email|string",
+         ]);
+ 
+         
+            $user = User::where("email", $request->email)->first();
 
-        //find the user by email
-        $user = User::where("email", $request->email)->first();
+            if (!$user) {
+                return response()->json([
+                    "status" => false,
+                    "message" => "Email not found!",
+                    "data" => []
+                ]);
+            }
 
-        if(!$user){
-            return response()->json([
-                "status"=> false,
-                "message"=> "Email not found!",
-                "data"=> []
+            $token = Str::random(4);
+
+            DB::table('password_reset_tokens')->insert([
+                'email' => $request->email,
+                'token' => $token,
+                'created_at' => Carbon::now()
             ]);
-        }
 
-        //generate a token
-        $token = Str::random(60);
+            $resetUrl = url('/reset-password?token=' . $token . '&email=' . urlencode($request->email));
 
-        //store the token in the password_reset table
-        DB::table('password_resets')->inset([
-            'email'=>$request->email,
-            'token'=>$token,
-            'created_at'=>Carbon::now()
-        ]);
-        
-        //sending the reset email
-        Mail::send('email.passwordReset',['token'=>$token], function($message) use ($request){
-            $message->to($request->email);
-            $message->subject('Password Reset Request');
-        });
-
-        return response()->json([
-            'status'=> true,
-            'message'=> 'Password resent email sent!',
-            'data'=> []
-        ]);
-
-    }
-    //POST [email, token, new_password, new_password_confirmation]
-    public function resetPassword(Request $request){
-        //validation
-        $request->validate([
-            'email'=>'required|email|string',
-            'token'=>'required|string',
-            'password'=> 'required|confirmend'
-        ]);
-        //find the token in the password_resets table
-        $passwordReset = DB::table('password_resets')->where([
-            ['token',$request->token],
-            ['email',$request->email]
-        ])->first();
-
-        if(!$passwordReset){
+            $details =  $resetUrl;
+            try {
+            Mail::to($request->email)->send(new MyTestMail($details));
             return response()->json([
-                'status'=> false,
-                'message'=> 'Invalid token!',
-                'data'=> []
+                'status' => true,
+                'message' => 'Password reset email sent!',
+                'data' => []
             ]);
-        }
-
-        //find the user by email
-        $user = User::where('email',$request->email)->first();
-
-        if(!$user){
-            return response()->json([
-                'status'=> false,
-                'message'=> 'User not found!',
-                'data'=> []
-            ]);
-        }
-
-        //update the user's password
-        $user->password= bcrypt($request->password);
-        $user->save();
-
-        //delete token
-        DB::table('password_resets')->where(['email'=>$request->email])->delete();
-        
-        return response()->json([
-            'status'=> true,
-            'message'=> 'Password has been reset!',
-            'data'=> []
-        ]);
-
-    }
+            } catch (Exception $e) {
+                Log::info($e->getMessage());
+                // Log the exception or handle it as per your application's needs
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Failed to send password reset email.',
+                    'error' => $e->getMessage(), 
+                    'data' => []
+                ], 500); 
+            }
+     }
+ 
+     // POST [email, token, new_password, new_password_confirmation]
+     public function resetPassword(Request $request)
+     {
+         $request->validate([
+             'email' => 'required|email|string',
+             'token' => 'required|string',
+             'password' => 'required|confirmed'
+         ]);
+ 
+         $passwordReset = DB::table('password_reset_tokens')->where([
+             ['token', $request->token],
+             ['email', $request->email]
+         ])->first();
+ 
+         if (!$passwordReset) {
+             return response()->json([
+                 'status' => false,
+                 'message' => 'Invalid token!',
+                 'data' => []
+             ],400);
+         }
+ 
+         $user = User::where('email', $request->email)->first();
+ 
+         if (!$user) {
+             return response()->json([
+                 'status' => false,
+                 'message' => 'User not found!',
+                 'data' => []
+             ]);
+         }
+ 
+         $user->password = Hash::make($request->password);
+         $user->save();
+ 
+         DB::table('password_reset_tokens')->where(['email' => $request->email])->delete();
+ 
+         return response()->json([
+             'status' => true,
+             'message' => 'Password has been reset!',
+             'data' => []
+         ]);
+     }
 }
