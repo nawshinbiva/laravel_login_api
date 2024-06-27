@@ -5,7 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 
 class ApiController extends Controller
 {
@@ -101,6 +105,47 @@ class ApiController extends Controller
         return response()->json([
             "status"=> true,
             "message"=> "User logged out!"
+        ]);
+
+    }
+    //POST [email]
+    public function forgotPassword(Request $request){
+        //validate
+        $request->validate([
+            "email"=>"required|email|string",
+        ]);
+
+        //find the user by email
+        $user = User::where("email", $request->email)->first();
+
+        if(!$user){
+            return response()->json([
+                "status"=> false,
+                "message"=> "Email not found!",
+                "data"=> []
+            ]);
+        }
+
+        //generate a token
+        $token = Str::random(60);
+
+        //store the token in the password_reset table
+        DB::table('password_resets')->inset([
+            'email'=>$request->email,
+            'token'=>$token,
+            'created_at'=>Carbon::now()
+        ]);
+        
+        //sending the reset email
+        Mail::send('email.passwordReset',['token'=>$token], function($message) use ($request){
+            $message->to($request->email);
+            $message->subject('Password Reset Request');
+        });
+
+        return response()->json([
+            'status'=> true,
+            'message'=> 'Password resent email sent!',
+            'data'=> []
         ]);
 
     }
