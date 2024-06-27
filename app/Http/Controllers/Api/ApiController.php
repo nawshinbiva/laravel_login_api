@@ -149,4 +149,51 @@ class ApiController extends Controller
         ]);
 
     }
+    //POST [email, token, new_password, new_password_confirmation]
+    public function resetPassword(Request $request){
+        //validation
+        $request->validate([
+            'email'=>'required|email|string',
+            'token'=>'required|string',
+            'password'=> 'required|confirmend'
+        ]);
+        //find the token in the password_resets table
+        $passwordReset = DB::table('password_resets')->where([
+            ['token',$request->token],
+            ['email',$request->email]
+        ])->first();
+
+        if(!$passwordReset){
+            return response()->json([
+                'status'=> false,
+                'message'=> 'Invalid token!',
+                'data'=> []
+            ]);
+        }
+
+        //find the user by email
+        $user = User::where('email',$request->email)->first();
+
+        if(!$user){
+            return response()->json([
+                'status'=> false,
+                'message'=> 'User not found!',
+                'data'=> []
+            ]);
+        }
+
+        //update the user's password
+        $user->password= bcrypt($request->password);
+        $user->save();
+
+        //delete token
+        DB::table('password_resets')->where(['email'=>$request->email])->delete();
+        
+        return response()->json([
+            'status'=> true,
+            'message'=> 'Password has been reset!',
+            'data'=> []
+        ]);
+
+    }
 }
